@@ -1,6 +1,7 @@
 use std::{
     error::Error,
-    fs, io,
+    fs,
+    io::{self, BufRead, BufReader, BufWriter, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
     thread,
@@ -18,7 +19,12 @@ fn main() {
 
     // Trying to convert it to a path
     let file_path = PathBuf::from(to_host);
-    if let Ok(file_contents) = fs::read_to_string(file_path) {
+    if let Ok(file_contents) = fs::read_to_string(&file_path) {
+        println!(
+            "Succesfully launched server at \x1b[38;2;100;100;200mhttps://localhost:5050/{}\x1b[0m",
+            file_path.to_string_lossy()
+        );
+
         let listener = TcpListener::bind("127.0.0.1:5050").expect("Unable to bind tcp listener");
         for stream in listener.incoming() {
             let stream = stream.expect("Failed connection");
@@ -29,17 +35,55 @@ fn main() {
     }
 }
 
-fn make_http_message(status: &str, content: &str, content_type: &str) -> String {
-    format!(
-        "{status}\r\n\
-        Content-Length: {}\r\n\
-        Content-Type: {content_type}\r\n\
-        \r\n\
-        {content}",
-        content.len()
-    )
+fn handle_connection(stream: TcpStream) -> Result<(), Box<dyn Error>> {
+    let mut reader = BufReader::new(&stream);
+    let mut writer = BufWriter::new(&stream);
+    loop {
+        let message = read_message(&mut reader)?;
+        let parts: Vec<&str> = message.split_whitespace().collect();
+        let method = parts[0];
+        let path = PathBuf::from(parts[1]).strip_prefix("/")?.to_owned();
+        println!("request: {message}");
+        if method == "GET" {
+            println!("path: {:?}", path);
+            let contents = fs::read_to_string(path);
+            println!("{:?}", contents);
+        }
+    }
 }
 
-fn handle_connection(mut stream: TcpStream) -> Result<(), Box<dyn Error>> {
+fn read_message(reader: &mut BufReader<&TcpStream>) -> Result<String, Box<dyn Error>> {
+    let mut buf = vec![];
+    return Ok(loop {
+        let mut line = vec![];
+        let read = reader.read_until(b'\n', &mut line)?;
+        buf.append(&mut line);
+        if read == 0 {
+            break String::from_utf8_lossy(&buf).to_string();
+        }
+        if buf.ends_with(b"\r\n\r\n") {
+            break String::from_utf8_lossy(&buf).to_string();
+        }
+    });
+}
+
+fn send_message(
+    writer: &mut BufWriter<&TcpStream>,
+    status_line: &str,
+    content: &str,
+    content_type: &str,
+) -> Result<(), Box<dyn Error>> {
+    let message = format!(
+        "{status_line}\r\n\
+        Content-Length: {}\r\n\
+        Content-Type: {}\r\n\
+        \r\n\
+        {}
+        ",
+        content.len(),
+        content_type,
+        content,
+    );
+    writer.write_all(message.as_bytes())?;
     Ok(())
 }
