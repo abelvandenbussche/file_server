@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fs,
-    io::{self, BufRead, BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
     thread,
@@ -19,19 +19,15 @@ fn main() {
 
     // Trying to convert it to a path
     let file_path = PathBuf::from(to_host);
-    if let Ok(file_contents) = fs::read_to_string(&file_path) {
-        println!(
-            "Succesfully launched server at \x1b[38;2;100;100;200mhttps://localhost:5050/{}\x1b[0m",
-            file_path.to_string_lossy()
-        );
+    println!(
+        "Succesfully launched server at \x1b[38;2;100;100;200mhttp://localhost:5050/{}\x1b[0m",
+        file_path.to_string_lossy()
+    );
 
-        let listener = TcpListener::bind("127.0.0.1:5050").expect("Unable to bind tcp listener");
-        for stream in listener.incoming() {
-            let stream = stream.expect("Failed connection");
-            let _ = thread::spawn(move || handle_connection(stream).expect("Thread panicked"));
-        }
-    } else {
-        eprintln!("File not valid");
+    let listener = TcpListener::bind("127.0.0.1:5050").expect("Unable to bind tcp listener");
+    for stream in listener.incoming() {
+        let stream = stream.expect("Failed connection");
+        let _ = thread::spawn(move || handle_connection(stream).expect("Thread panicked"));
     }
 }
 
@@ -41,13 +37,20 @@ fn handle_connection(stream: TcpStream) -> Result<(), Box<dyn Error>> {
     loop {
         let message = read_message(&mut reader)?;
         let parts: Vec<&str> = message.split_whitespace().collect();
+
         let method = parts[0];
         let path = PathBuf::from(parts[1]).strip_prefix("/")?.to_owned();
         println!("request: {message}");
+
         if method == "GET" {
             println!("path: {:?}", path);
-            let contents = fs::read_to_string(path);
-            println!("{:?}", contents);
+            if let Ok(contents) = fs::read_to_string(path) {
+                println!("Response: {contents}");
+                send_message(&mut writer, "HTTP/1.1 200 OK", &contents, "text/html")?;
+            } else {
+                eprintln!("Failed to find file");
+                send_message(&mut writer, "HTTP/1.1 404 File Not Found", "", "text/html")?;
+            }
         }
     }
 }
@@ -78,12 +81,13 @@ fn send_message(
         Content-Length: {}\r\n\
         Content-Type: {}\r\n\
         \r\n\
-        {}
-        ",
+        {}",
         content.len(),
         content_type,
         content,
     );
+    println!("Writing: \'{message}\'");
     writer.write_all(message.as_bytes())?;
+    writer.flush()?;
     Ok(())
 }
