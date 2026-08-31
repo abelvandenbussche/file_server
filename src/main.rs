@@ -1,3 +1,4 @@
+use open;
 use std::{
     error::Error,
     fs,
@@ -19,10 +20,10 @@ fn main() {
 
     // Trying to convert it to a path
     let file_path = PathBuf::from(to_host);
-    println!(
-        "Succesfully launched server at \x1b[38;2;100;100;200mhttp://localhost:5050/{}\x1b[0m",
-        file_path.to_string_lossy()
-    );
+    let url = format!("http://localhost:5050/{}", file_path.to_string_lossy());
+    println!("Succesfully launched server at \x1b[38;2;100;100;200m{url}\x1b[0m",);
+
+    let _ = open::that(url);
 
     let listener = TcpListener::bind("127.0.0.1:5050").expect("Unable to bind tcp listener");
     for stream in listener.incoming() {

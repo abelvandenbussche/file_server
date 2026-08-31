@@ -8,3 +8,4 @@ name = "live"
 path = "src/main.rs"
 
 [dependencies]
+open = "5.4.2"
