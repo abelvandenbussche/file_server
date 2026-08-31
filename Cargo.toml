@@ -3,4 +3,8 @@ name = "web_server"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "live"
+path = "src/main.rs"
+
 [dependencies]
