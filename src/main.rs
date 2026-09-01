@@ -1,12 +1,38 @@
+use notify::{Watcher, recommended_watcher};
 use open;
 use std::{
+    env::args,
     error::Error,
     fs,
     io::{BufRead, BufReader, BufWriter, Write},
     net::{TcpListener, TcpStream},
     path::PathBuf,
+    sync::mpsc::channel,
     thread,
+    time::{Duration, Instant},
 };
+
+struct Timer {
+    start_time: Instant,
+    duration: Duration,
+}
+
+impl Timer {
+    fn start(duration: Duration) -> Self {
+        Self {
+            start_time: Instant::now(),
+            duration,
+        }
+    }
+
+    fn is_finished(&self) -> bool {
+        self.start_time.elapsed() >= self.duration
+    }
+
+    fn restart(&mut self) {
+        self.start_time = Instant::now();
+    }
+}
 
 fn main() {
     // Trying to get the first argument
@@ -46,6 +72,8 @@ fn handle_connection(stream: TcpStream) -> Result<(), Box<dyn Error>> {
         if &path == "events" {
             println!("Connection from socket");
             handle_refresh_connection(&mut writer);
+            // This is unreachable because of the above function
+            break Ok(());
         } else if method == "GET" {
             println!("path: {:?}", path);
             if let Ok(mut contents) = fs::read_to_string(&path) {
@@ -71,10 +99,31 @@ fn handle_refresh_connection(writer: &mut BufWriter<&TcpStream>) {
     \r\n";
     let _ = writer.write_all(message.as_bytes());
     let _ = writer.flush();
-    loop {
-        let _ = writer.write_all(b"data: Hello world!\r\n\r\n");
-        println!("sent");
-        let _ = writer.flush();
+    let (tx, rcx) = channel();
+    let mut watcher = recommended_watcher(move |res| {
+        let _ = tx.send(res);
+    })
+    .unwrap();
+
+    // We can safely unwrap because the begining of the program already checks that it exists
+    let chosen_file = PathBuf::from(args().skip(1).next().unwrap());
+    let to_watch_path = if let Some(p) = chosen_file.parent() {
+        p.to_owned()
+    } else {
+        ".".into()
+    };
+
+    watcher
+        .watch(&to_watch_path, notify::RecursiveMode::Recursive)
+        .expect("Failed to watch path");
+
+    let mut timer = Timer::start(Duration::from_millis(100));
+    while rcx.recv().is_ok() {
+        if timer.is_finished() {
+            timer.restart();
+            let _ = writer.write_all(b"data: Refresh\r\n\r\n");
+            let _ = writer.flush();
+        }
     }
 }
 

@@ -8,4 +8,5 @@ name = "live"
 path = "src/main.rs"
 
 [dependencies]
+notify = "8.2.0"
 open = "5.4.2"
