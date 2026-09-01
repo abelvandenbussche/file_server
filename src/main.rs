@@ -94,7 +94,7 @@ fn handle_refresh_connection(writer: &mut BufWriter<&TcpStream>) {
     let message = "\
     HTTP/1.1 200 OK\r\n\
     Content-Type: text/event-stream\r\n\
-    Cache-Control: no-cache\r\n\
+    Cache-Control: no-store\r\n\
     Connection: Keep-alive\r\n\
     \r\n";
     let _ = writer.write_all(message.as_bytes());
@@ -168,6 +168,7 @@ const TO_INSERT: &str = r#"<script>
     const events = new EventSource("http://localhost:5050/events");
     events.onmessage = (event) => {
         console.log("Server: ", event.data);
+        window.location.reload();
     }
 </script>"#;
 
